@@ -6,9 +6,9 @@
 
 ### 小白用户
 
-该方法直接运行exe文件，exe文件可以在https://github.com/hrwhisper/Ucas_course_ppt_auto_download/releases 中下载
+该方法直接运行exe文件，exe文件可以在 https://github.com/youqingxiaozhua/Ucas_course_ppt_auto_download/releases 中下载
 
-修改**private.txt**文件，然后运行main.exe即可(建议使用PowerShell运行)。
+修改**private.txt**文件，然后双击运行main.exe即可
 
 ps: 
 
