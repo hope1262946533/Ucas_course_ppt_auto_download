@@ -47,9 +47,8 @@ class UCASCourse(object):
         # 从sep中获取Identity Key来登录课程系统，并获取课程信息
         url = "http://sep.ucas.ac.cn/portal/site/16/801"
         r = self.session.get(url, headers=self.headers)
-        code = re.findall(r'"http://course.ucas.ac.cn/portal/plogin\?Identity=(.*)"', r.text)[0]
+        url = re.findall(r'<meta http-equiv="refresh" content="0;url=([^"]*)">', r.text)[0]
 
-        url = "http://course.ucas.ac.cn/portal/plogin?Identity=" + code
         self.headers['Host'] = "course.ucas.ac.cn"
         html = self.session.get(url, headers=self.headers).text
         return html
@@ -57,13 +56,13 @@ class UCASCourse(object):
     def _parse_course_list(self):
         # 获取课程的所有URL
         html = self._get_course_page()
-        self.course_list = ['http://course.ucas.ac.cn/portal/site/' + x for x in
-                            re.findall(r'http://course.ucas.ac.cn/portal/site/([\d]+)"', html)]
+        self.course_list = ['https://course.ucas.ac.cn/portal/site/' + x for x in
+                            re.findall(r'https://course.ucas.ac.cn/portal/site/([\d]+)"', html)]
 
     def _get_all_resource_url(self):
         # 从课程的所有URL中获取对应的所有课件
         print('读取课件中......')
-        base_url = 'http://course.ucas.ac.cn/access/content/group/'
+        base_url = 'https://course.ucas.ac.cn/access/content/group/'
         urls = [base_url + x.split('/')[-1] + '/' for x in self.course_list]
         list(map(self._get_resource_url, urls))
 
@@ -127,7 +126,7 @@ class UCASCourse(object):
             except TypeError:
                 size_mb = 0.33  # html文件直接指定大小 :)
             try:
-                print('Start download {dic_name}  >> {sub_directory}{filename}  {size_mb:.2f}MB'.format(**locals()))
+                # print('Start download {dic_name}  >> {sub_directory}{filename}  {size_mb:.2f}MB'.format(**locals()))
                 with open(save_path, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=1024):
                         if chunk:  # filter out keep-alive new chunks
