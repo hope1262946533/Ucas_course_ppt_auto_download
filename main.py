@@ -2,6 +2,7 @@
 # @Date    : 2016/9/9
 # @Author  : hrwhisper
 import codecs
+import json
 import re
 import os
 import multiprocessing
@@ -14,7 +15,7 @@ from LoginUCAS import LoginUCAS
 
 
 class UCASCourse(object):
-    def __init__(self, time_out=5):
+    def __init__(self, time_out=5, check_version=True):
         self.__BEAUTIFULSOUPPARSE = 'html.parser'  # or use 'lxml'
         self.semester = None
         self.save_base_path, self.semester = UCASCourse._read_info_from_file()
@@ -25,6 +26,17 @@ class UCASCourse(object):
         self.to_download = []
         self.lock = multiprocessing.Lock()
         self._time_out = time_out
+        self.version = '1.4'
+        self.check_version = check_version
+
+    def _check_version(self):
+        r = requests.get('https://api.github.com/repos/youqingxiaozhua/Ucas_course_ppt_auto_download/releases/latest')
+        github_latest = json.loads(r.text)
+        version = github_latest['name']
+        version_note = github_latest['body']
+        if version != self.version:
+            print('\nA new version (v%s: %s) have been released, please download from this link:' % (github_latest, version_note))
+            print('https://github.com/youqingxiaozhua/Ucas_course_ppt_auto_download/releases\n')
 
     def _init_session(self):
         t = LoginUCAS().login_sep()
@@ -137,6 +149,8 @@ class UCASCourse(object):
                 print('{dic_name}  >> {sub_directory} Download a file'.format(**locals()))
 
     def start(self):
+        if self.check_version:
+            self._check_version()
         self._parse_course_list()
         self._get_all_resource_url()
         self._start_download()
