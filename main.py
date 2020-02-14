@@ -35,7 +35,7 @@ class UCASCourse(object):
         version = github_latest['name']
         version_note = github_latest['body']
         if version != self.version:
-            print('\nA new version (v%s: %s) have been released, please download from this link:' % (github_latest, version_note))
+            print('\nA new version (v%s: %s) have been released, please download from this link:' % (version, version_note))
             print('https://github.com/youqingxiaozhua/Ucas_course_ppt_auto_download/releases\n')
 
     def _init_session(self):
