@@ -1,4 +1,5 @@
-# UCAS 课件自动下载
+
+# UCAS 课件和视频自动下载
 
 ## 使用方法
 
@@ -33,14 +34,16 @@ private中，各行表示意义如下：
 2. 第二行为密码
 3. 第三行为要保存的路径
 4. 第四行为当前的学期，如16-17春季（没有则全部下载）
+5. 第五行为是否下载视频，true 或者 false（没有则为false，即不下载）
 
 
 
 ##环境要求
 
-- python 3.5.2
-- requests 2.11
-- BeautifulSoup
+- python 3.5 +
+- requests 2.11 +
+- BeautifulSoup 4.6 +
+- 视频下载需要下载并配置ffmpeg
 - 可选环境：
   - PIL
   - Tesseract-OCR
@@ -49,6 +52,7 @@ private中，各行表示意义如下：
 - pip install beautifulsoup4
 - pip install requests
 - pip install Pillow
+- ffmpeg下载和配置教程：[https://www.jianshu.com/p/2b609afb9800](https://www.jianshu.com/p/2b609afb9800)
 - 登录网址默认为 http://onestop.ucas.ac.cn/home/index ，如果为这个网站挂了，将使用sep.ucas.as.cn 登录，当你在校外的时候那么需要在安装如下环境以支持验证码识别：
   - Tesseract-OCR
     - windows下安装：http://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-setup-3.05.00dev.exe
@@ -65,6 +69,7 @@ private中，各行表示意义如下：
 - **觉得好用点个star吧~**
 
 ## 更新说明
+- 2020-3-29 添加录播视频下载
 - 2020-2-14 新增升级提示
 - 2020-2-14 适配课程网站升级为HTTPS
 - 更新适配到2019年秋季
