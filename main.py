@@ -20,11 +20,14 @@ class UCASVideo(object):
         self.name = '' #网站上该视频的名称
         # self.play_page_url = '' #课程视频的播放链接
         self.u3m8_url = '' #加密地址
+        self.dir_name = ''
 
-    def __init__(self, name, u3m8_url):
+    def __init__(self, name:'str', u3m8_url:'str', dirname = ''):
+
         self.name = name #网站上该视频的名称
         # self.play_page_url = play_page_url #课程视频的播放链接
         self.u3m8_url = u3m8_url #加密地址
+        self.dir_name = dirname
 
 class UCASCourse(object):
     def __init__(self):
@@ -257,6 +260,72 @@ class UCASCourseDownloader(object):
             course_video_list = course_video_list + self._get_all_course_video(video_list_base_url, page_number + 1)
         return course_video_list
 
+    def _get_live_info_list(self, special_time_record_list_url: 'str', page_number = 1) ->list:
+        video_info_set = set()
+        has_next_page = False
+        html = self.session.get(special_time_record_list_url, headers=self.headers).text
+        html = BeautifulSoup(html, self.__BEAUTIFULSOUPPARSE)
+
+        a_tag_list = html.find_all('a')
+        for a_tag in a_tag_list:  # 从中提取出各个视频的信息
+            if a_tag.text == '下一页':#有下一页
+                has_next_page = True
+
+            temp_text = a_tag.get("onclick") # 如，gotoPlay('21067','2');return false;
+            if not temp_text or not 'gotoPlay' in temp_text:
+                continue
+
+            video_id = temp_text.split('\'')[1] #如，分离出21076
+            video_name = temp_text.split('\'')[3]
+            video_info_set.add((video_id, video_name))
+
+        if has_next_page:
+            video_info_set = video_info_set.union(self._get_live_info_list(special_time_record_list_url, page_number + 1))
+        return list(video_info_set)
+
+    def _get_all_live_video(self, video_list_base_url: 'str', page_number = 1) ->list:
+        course_video_list = []
+        has_next_page = False #标记是否有下一页
+        #对视频进行解析，解析出UCASVideo列表
+
+        # 获得课程id
+        site_id = video_list_base_url.split('/')[5] # 如，'https://course.ucas.ac.cn/portal/site/173977/tool/0ce5bb50-3042-4f04-b74f-700ef8f4d793/video'
+
+        video_dir_list_url = video_list_base_url + '/recordPage' + '/' + '?pageNum=' + str(page_number)
+        html = self.session.get(video_dir_list_url, headers = self.headers).text
+        html = BeautifulSoup(html, self.__BEAUTIFULSOUPPARSE)
+        a_tag_list = html.find_all('a')
+        for a_tag in a_tag_list:  # 遍历所有的a标签，查找某个视频播放的hash地址，并获得u3m8地址
+            if a_tag.text == '下一页':#有下一页
+                has_next_page = True
+            temp_text = a_tag.get("onclick")
+            if not temp_text or not 'gotoList' in temp_text:
+                continue
+            if a_tag.get("title") != a_tag.text: # 过滤掉重复的直播时间，只保留文本中的日期
+                continue
+            # 获取直播的日期
+            record_time = a_tag.get("title")
+
+            special_time_record_list_url = video_list_base_url + '/recordList?siteId=' + site_id + '&recordingTime=' + record_time
+
+            special_time_live_video_info_list =  self._get_live_info_list(special_time_record_list_url)#一个二元组list
+            for video_info in special_time_live_video_info_list:
+                video_id = video_info[0]
+                video_name = video_info[1]
+
+                # 拼接观看地址
+                play_video_url = video_list_base_url + '/play?id=' + video_id + '&type=r&rank=' + video_name
+                # 需要从play_video_url获取到u3m8地址
+                play_video_u3m8_url = self._get_u3m8_url_form_url(play_video_url)
+
+                video_object = UCASVideo(video_name, play_video_u3m8_url, record_time + '/')
+                course_video_list.append(video_object)
+
+        #需要处理可能存在的多页情况
+        if has_next_page:
+            course_video_list = course_video_list + self._get_all_course_video(video_list_base_url, page_number + 1)
+        return course_video_list
+
     #添加某课程的全部视频后返回
     def _add_to_course_all_course_video(self, course: 'UCASCourse') -> UCASCourse:
 
@@ -265,9 +334,7 @@ class UCASCourseDownloader(object):
         course.course_video_list = course_video_list
 
         #直播视频
-        record_video_list_url = course.video_page_conmon_url + '/record'
-
-        live_video_list = []
+        live_video_list = self._get_all_live_video(course.video_page_conmon_url)
         course.live_video_list = live_video_list
 
         return course
@@ -317,26 +384,59 @@ class UCASCourseDownloader(object):
             if not os.path.exists(save_path):  # To create directory
                 os.makedirs(save_path)
 
-        save_path += '/"' + video_name + '.mp4"'
-        if os.path.exists(save_path):  # To prevent download exists files
+        temp_path = save_path + '/' + video_name + '.mp4' #如果这里加双引号，则下一行的路径判断出错
+        if os.path.exists(temp_path):  # To prevent download exists files
             print('Warn-----------视频已存在: ', dic_name + ' "' + video_name + '.mp4"')
             return
 
         # 需要提前下载配置ffmpeg
-        ffmpeg_command = 'ffmpeg -i ' + video_m3u8_url + ' -c copy ' + save_path
+        ffmpeg_command = 'ffmpeg -i ' + video_m3u8_url + ' -c copy ' + save_path + '/"' + video_name + '.mp4"'
+        # 只打印下载结果
         try:
-            # 只打印下载结果
+            proc = subprocess.Popen(
+                ffmpeg_command,
+                shell = True,
+                stdout = subprocess.PIPE,
+                stderr = subprocess.PIPE,
+                # universal_newlines = True,
+                bufsize = -1
+            )
+            stdout, stderr = proc.communicate()  # 等待完成
+
+            print('Done-----------视频下载成功: ', dic_name + ' "' + video_name + '.mp4"')
+        except Exception as e: #错误捕获是失败的，有错误也获取不到
+            print('Error-----------视频下载失败，请重试: ', dic_name + ' "' + video_name + '.mp4"')
+        return
+
+    def _download_live_video(self, param:'tuple'):
+        dic_name, sub_directory, video_name, video_m3u8_url = param  # 课程名称， 子目录名称（默认为空），视频名称，课件完整u3m8地址
+        save_path = self.save_base_path + '/' + dic_name + '/直播视频' + '/' + sub_directory  # 保存目录
+        with self.lock:
+            if not os.path.exists(save_path):  # To create directory
+                os.makedirs(save_path)
+
+        temp_path = save_path + '/' + video_name + '.mp4'  # 如果这里加双引号，则下一行的路径判断出错
+        if os.path.exists(temp_path):  # To prevent download exists files
+            print('Warn-----------视频已存在: ', dic_name + ' ' + sub_directory + ' "' + video_name + '.mp4"')
+            return
+
+        # 需要提前下载配置ffmpeg
+        ffmpeg_command = 'ffmpeg -i ' + video_m3u8_url + ' -c copy ' + save_path + '/"' + video_name + '.mp4"'
+        # 只打印下载结果
+        try:
             proc = subprocess.Popen(
                 ffmpeg_command,
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                # universal_newlines = True,
                 bufsize=-1
             )
-            proc.communicate()  # 等待完成
-            print('Done-----------视频下载成功: ', dic_name + ' "' + video_name + '.mp4"')
-        except Exception as e:
-            print('Error-----------视频下载失败，请重试: ', dic_name + ' "' + video_name + '.mp4"')
+            stdout, stderr = proc.communicate()  # 等待完成
+
+            print('Done-----------视频下载成功: ', dic_name + ' ' + sub_directory + ' "' + video_name + '.mp4"')
+        except Exception as e:  # 错误捕获是失败的，有错误也获取不到
+            print('Error-----------视频下载失败，请重试: ', dic_name + ' ' + sub_directory + ' "' + video_name + '.mp4"')
         return
 
     def _download(self, course:'UCASCourse'):
@@ -348,29 +448,50 @@ class UCASCourseDownloader(object):
             # 课程名称， 子目录名称（默认为空），视频名称，课件完整u3m8地址
             dic_name = course.name
             sub_directory = ''
-            course_video_list = course.course_video_list
+            live_video_list = course.course_video_list
 
-            dic_name_list = [dic_name for index in range (course_video_list.__len__())]
-            sub_directory_list = [sub_directory for index in range(course_video_list.__len__())]
-            video_name_list = [course_video_list[index].name for index in range(course_video_list.__len__())]
-            u3m8_url_list = [course_video_list[index].u3m8_url for index in range(course_video_list.__len__())]
+            dic_name_list = [dic_name for index in range (live_video_list.__len__())]
+            sub_directory_list = [sub_directory for index in range(live_video_list.__len__())]
+            video_name_list = [live_video_list[index].name for index in range(live_video_list.__len__())]
+            u3m8_url_list = [live_video_list[index].u3m8_url for index in range(live_video_list.__len__())]
 
             # 开启线程池，每个视频一个，最大可能并行化
             param_list = [
                 (dic_name_list[index], sub_directory_list[index], video_name_list[index], u3m8_url_list[index])
-                for index in range (course_video_list.__len__())
+                for index in range (live_video_list.__len__())
             ]
 
-            course_video_download_pool = Pool()
-            course_video_download_pool.map(self._download_course_video, param_list)
-            # course_video_download_pool.map(self._download_course_video, dic_name_list, sub_directory_list,
+            live_video_download_pool = Pool()
+            live_video_download_pool.map(self._download_course_video, param_list)
+            # live_video_download_pool.map(self._download_course_video, dic_name_list, sub_directory_list,
             #                                video_name_list, u3m8_url_list)
-            course_video_download_pool.close()
-            course_video_download_pool.join()
+            live_video_download_pool.close()
+            live_video_download_pool.join()
 
         #下载直播视频
         if course.live_video_list.__len__():
-            pass
+            # 课程名称， 子目录名称（默认为空），视频名称，课件完整u3m8地址
+            dic_name = course.name
+            sub_directory = ''
+            live_video_list = course.live_video_list
+
+            dic_name_list = [dic_name for index in range (live_video_list.__len__())]
+            sub_directory_list = [live_video_list[index].dir_name for index in range(live_video_list.__len__())]
+            video_name_list = [live_video_list[index].name for index in range(live_video_list.__len__())]
+            u3m8_url_list = [live_video_list[index].u3m8_url for index in range(live_video_list.__len__())]
+
+            # 开启线程池，每个视频一个，最大可能并行化
+            param_list = [
+                (dic_name_list[index], sub_directory_list[index], video_name_list[index], u3m8_url_list[index])
+                for index in range (live_video_list.__len__())
+            ]
+
+            live_video_download_pool = Pool()
+            live_video_download_pool.map(self._download_live_video, param_list)
+            # live_video_download_pool.map(self._download_course_video, dic_name_list, sub_directory_list,
+            #                                video_name_list, u3m8_url_list)
+            live_video_download_pool.close()
+            live_video_download_pool.join()
 
         return
 
