@@ -85,8 +85,9 @@ class UCASCourseDownloader(object):
     def __init__(self, time_out = 5, check_version = False):
         self.__BEAUTIFULSOUPPARSE = 'html.parser'  # or use 'lxml'
         self.semester = None
-        self.is_download_video = False
-        self.save_base_path, self.semester, self.is_download_video = UCASCourseDownloader._read_info_from_file()
+        self.is_download_record_video = False
+        self.is_download_live_video = False
+        self.save_base_path, self.semester, self.is_download_record_video, self.is_download_live_video = UCASCourseDownloader._read_info_from_file()
         self.session = None
         self.headers = None
         self._init_session()
@@ -117,7 +118,8 @@ class UCASCourseDownloader(object):
     def _read_info_from_file(cls):
         with codecs.open('./private.txt', "r", "utf-8") as f:
             save_base_path = semester = None
-            is_download_video = False
+            is_download_record_video = False
+            is_download_live_video = False
             for i, line in enumerate(f):
                 if i < 2: continue
                 if i == 2:
@@ -125,8 +127,10 @@ class UCASCourseDownloader(object):
                 if i == 3:
                     semester = line.strip()
                 if i == 4:
-                    is_download_video = line.strip()
-        return save_base_path, semester, is_download_video
+                    is_download_record_video = line.strip() == 'true'
+                if i == 5:
+                    is_download_live_video = line.strip() == 'true'
+        return save_base_path, semester, is_download_record_video, is_download_live_video
 
     def _get_course_page(self):
         # 从sep中获取Identity Key来登录课程系统，并获取课程信息
@@ -329,13 +333,15 @@ class UCASCourseDownloader(object):
     #添加某课程的全部视频后返回
     def _add_to_course_all_course_video(self, course: 'UCASCourse') -> UCASCourse:
 
-        #录播视频
-        course_video_list = self._get_all_course_video(course.video_page_conmon_url)
-        course.course_video_list = course_video_list
+        if self.is_download_record_video:
+            #录播视频
+            course_video_list = self._get_all_course_video(course.video_page_conmon_url)
+            course.course_video_list = course_video_list
 
-        #直播视频
-        live_video_list = self._get_all_live_video(course.video_page_conmon_url)
-        course.live_video_list = live_video_list
+        if self.is_download_live_video:
+            #直播视频
+            live_video_list = self._get_all_live_video(course.video_page_conmon_url)
+            course.live_video_list = live_video_list
 
         return course
 
@@ -519,16 +525,18 @@ class UCASCourseDownloader(object):
         course_base_info_list = self._get_course_base_info_list()
         course_full_info_list = course_base_info_list  # 包含课件信息的课程列表，需要后续处理
 
-        if self.is_download_video:
-            print('读取视频中......')
+        if not (self.is_download_live_video or self.is_download_record_video):
+            return
 
-            #下面两句如何合并，则会出错
-            course_full_info_list_include_video = list(
-                map(self._add_to_course_all_course_video, course_full_info_list)
-            )  # 包含视频信息的课程列表
-            course_full_info_list = course_full_info_list_include_video
+        print('读取视频中......')
 
-            print('读取视频信息完成。')
+        #下面两句如何合并，则会出错
+        course_full_info_list_include_video = list(
+            map(self._add_to_course_all_course_video, course_full_info_list)
+        )  # 包含视频信息的课程列表
+        course_full_info_list = course_full_info_list_include_video
+
+        print('读取视频信息完成。')
         print('开始下载视频......')
         list(map(self._download, course_full_info_list))
 
